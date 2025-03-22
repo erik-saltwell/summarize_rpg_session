@@ -12,6 +12,7 @@ from typing import Optional, List
 
 import typer
 from rich.console import Console
+from rich.progress import Progress
 from dotenv import load_dotenv
 
 # Initialize typer app and rich console
@@ -103,31 +104,89 @@ def main(
     console.print("[bold green]summarize_rpg_session[/] starting up...", highlight=False)
 
     # Process based on input type
+    transcript_content = None
+    
     if audio:
         console.print(f"Processing audio file: {audio}")
-        # Here we would implement audio transcription, diarization, and summarization
-        # For now, just print what would happen
-        console.print("[yellow]Would transcribe audio to text[/]")
-        if transcript_output:
-            console.print(f"[yellow]Would save diarized transcript to {transcript_output}[/]")
+        
+        try:
+            # Import the transcription module here to avoid circular imports
+            from transcription import transcribe_and_diarize, TranscriptionError, DiarizationError
+            
+            # Convert speaker_names from None or List[str] to List[str] or None
+            speaker_name_list = speaker_names if speaker_names else None
+            
+            # Perform transcription and diarization with progress feedback
+            with console.status("[bold blue]Transcribing audio...", spinner="dots") as status:
+                console.print("[bold]Starting transcription and diarization process[/]")
+                try:
+                    transcript_content = transcribe_and_diarize(audio, speaker_name_list)
+                    console.print("[bold green]✓[/] Transcription and diarization complete!")
+                except TranscriptionError as e:
+                    console.print(f"[bold red]Transcription error:[/] {str(e)}")
+                    raise
+                except DiarizationError as e:
+                    console.print(f"[bold red]Diarization error:[/] {str(e)}")
+                    raise
+            
+            # Save the diarized transcript if requested
+            if transcript_output:
+                with open(transcript_output, "w", encoding="utf-8") as f:
+                    f.write(transcript_content)
+                console.print(f"Diarized transcript saved to: [bold]{transcript_output}[/]")
+            
+        except (TranscriptionError, DiarizationError) as e:
+            console.print(f"[bold red]Error during transcription/diarization:[/] {str(e)}")
+            sys.exit(1)
+            
     else:
         console.print(f"Processing transcript file: {transcript}")
-        # Here we would implement transcript summarization
-        # For now, just print what would happen
-        console.print("[yellow]Would summarize existing transcript[/]")
+        
+        # Read the provided transcript file
+        try:
+            with open(transcript, "r", encoding="utf-8") as f:
+                transcript_content = f.read()
+            console.print(f"Loaded transcript from: [bold]{transcript}[/]")
+        except Exception as e:
+            console.print(f"[bold red]Error reading transcript file:[/] {str(e)}")
+            sys.exit(1)
 
     # Speaker names processing
     if speaker_names:
         console.print(f"Using provided speaker names: {', '.join(speaker_names)}")
 
-    # Here we would implement the actual summarization
-    console.print(f"[yellow]Would save summary to {summary_output}[/]")
+    # TODO: Implement summarization in a separate module
+    # For now, just save a placeholder summary
+    try:
+        # Create a simple placeholder summary with the first few lines
+        summary_text = f"""# RPG Session Summary
 
-    # Demo success message
-    console.print("[bold green]✓[/] Processing complete!")
-    console.print(f"Summary saved to: [bold]{summary_output}[/]")
-    if transcript_output and audio:
-        console.print(f"Diarized transcript saved to: [bold]{transcript_output}[/]")
+This is a placeholder summary. The full summarization functionality will be implemented in a future update.
+
+## Session Overview
+
+The session transcript contains approximately {len(transcript_content.split())} words.
+
+## Notable Moments
+
+First few lines of the transcript:
+
+```
+{transcript_content[:500] + "..." if len(transcript_content) > 500 else transcript_content}
+```
+"""
+        
+        # Write the summary to the output file
+        with open(summary_output, "w", encoding="utf-8") as f:
+            f.write(summary_text)
+        
+        # Success message
+        console.print("[bold green]✓[/] Processing complete!")
+        console.print(f"Summary saved to: [bold]{summary_output}[/]")
+        
+    except Exception as e:
+        console.print(f"[bold red]Error writing summary:[/] {str(e)}")
+        sys.exit(1)
 
 
 if __name__ == "__main__":
